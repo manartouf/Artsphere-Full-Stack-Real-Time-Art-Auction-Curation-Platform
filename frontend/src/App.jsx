@@ -4,6 +4,7 @@ import { AuthContext } from './context/AuthContext';
 import { useContext } from 'react';
 
 import Navbar from './components/Navbar';
+import SpotlightOverlay from './components/SpotlightOverlay';
 
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -11,7 +12,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Browse from './pages/Browse';
 import Artists from "./pages/Artists";
-import Auctions from "./pages/Auctions"; // ✅ NEW
+import Auctions from "./pages/Auctions";
 import ArtDetails from './pages/ArtDetails';
 import ArtistProfile from './pages/ArtistProfile';
 import Exhibitions from './pages/Exhibitions';
@@ -42,11 +43,13 @@ function App() {
     <Router>
       <div className="min-h-screen bg-[#0a0a1a] text-white">
         <Toaster position="top-center" />
+        {/* ── Global cursor spotlight — pointer-events:none, safe ── */}
+        <SpotlightOverlay />
         <Navbar />
         <Routes>
           <Route path="/"               element={<Home />} />
           <Route path="/browse"         element={<Browse />} />
-          <Route path="/auctions"       element={<Auctions />} /> {/* ✅ NEW */}
+          <Route path="/auctions"       element={<Auctions />} />
           <Route path="/art/:id"        element={<ArtDetails />} />
           <Route path="/artist/:id"     element={<ArtistProfile />} />
           <Route path="/exhibitions"    element={<Exhibitions />} />
@@ -55,15 +58,15 @@ function App() {
           <Route path="/register"       element={<Register />} />
           <Route path="/artists"        element={<Artists />} />
 
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/auction/:id" element={<ProtectedRoute><AuctionRoom /></ProtectedRoute>} />
-          <Route path="/upload" element={<ProtectedRoute><UploadArt /></ProtectedRoute>} />
-          <Route path="/create-collection" element={<ProtectedRoute><CreateCollection /></ProtectedRoute>} />
-          <Route path="/request-auction" element={<ProtectedRoute><RequestAuction /></ProtectedRoute>} />
+          <Route path="/profile"            element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/auction/:id"        element={<ProtectedRoute><AuctionRoom /></ProtectedRoute>} />
+          <Route path="/upload"             element={<ProtectedRoute><UploadArt /></ProtectedRoute>} />
+          <Route path="/create-collection"  element={<ProtectedRoute><CreateCollection /></ProtectedRoute>} />
+          <Route path="/request-auction"    element={<ProtectedRoute><RequestAuction /></ProtectedRoute>} />
 
-          <Route path="/buyer" element={<RoleRoute role="buyer"><BuyerDashboard /></RoleRoute>} />
+          <Route path="/buyer"            element={<RoleRoute role="buyer"><BuyerDashboard /></RoleRoute>} />
           <Route path="/artist/dashboard" element={<RoleRoute role="artist"><ArtistDashboard /></RoleRoute>} />
-          <Route path="/admin" element={<RoleRoute role="admin"><AdminDashboard /></RoleRoute>} />
+          <Route path="/admin"            element={<RoleRoute role="admin"><AdminDashboard /></RoleRoute>} />
 
           <Route path="*" element={
             <div className="text-center py-20 text-gray-500">

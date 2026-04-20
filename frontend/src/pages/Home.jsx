@@ -6,6 +6,11 @@ import ArtCard from "../components/ArtCard";
 import ArtistCard from "../components/ArtistCard";
 import CountdownTimer from "../components/CountdownTimer";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useTypingEffect } from "../hooks/useTypingEffect";
+//import InfiniteCanvas from "../components/InfiniteCanvas";
+
+// Words that cycle in the animated hero heading
+const HERO_WORDS = ["Discover", "Collect", "Explore", "Experience"];
 
 const Home = () => {
   const { user } = useContext(AuthContext);
@@ -16,11 +21,18 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
 
+  // ── Typing effect for hero heading ──────────────────────
+  const typedWord = useTypingEffect(HERO_WORDS, {
+    typeSpeed: 80,
+    deleteSpeed: 45,
+    pauseAfterType: 2000,
+  });
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [artRes, exRes] = await Promise.all([
-          API.get("/artworks"), // ✅ FIX: was /art
+          API.get("/artworks"),
           API.get("/exhibitions"),
         ]);
         setArtworks(artRes.data);
@@ -34,7 +46,6 @@ const Home = () => {
     fetchData();
   }, []);
 
-  // Derived lists
   const featuredArt = artworks.filter(a => !a.isSold).slice(0, 6);
   const liveAuctions = artworks.filter(a => a.isAuction && !a.isSold && a.status === "approved");
   const artists = [];
@@ -48,7 +59,6 @@ const Home = () => {
   });
   const featuredArtists = artists.slice(0, 8);
 
-  // Auto-rotate hero slideshow
   useEffect(() => {
     if (featuredArt.length === 0) return;
     const interval = setInterval(() => {
@@ -71,7 +81,6 @@ const Home = () => {
           background: "linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #0f0f20 100%)",
         }}
       >
-        {/* Background artwork blur */}
         {heroArt && (
           <div
             className="absolute inset-0 opacity-20 transition-all duration-1000"
@@ -84,25 +93,43 @@ const Home = () => {
           />
         )}
 
-        {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/50" />
 
-        {/* Hero content */}
         <div className="relative z-10 max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-12 items-center py-20">
 
-          {/* Left — text */}
           <div className="space-y-6">
             <p className="text-[#6c3483] text-sm font-bold uppercase tracking-[0.3em]">
               Online Art Curation & Auction Platform
             </p>
+
+            {/* ── Animated hero heading ── */}
             <h1
               className="text-5xl md:text-6xl font-black text-white leading-tight"
               style={{ fontFamily: "Georgia, serif" }}
             >
-              Discover,<br />
-              Collect &<br />
-              <span className="text-[#6c3483]">Bid on Art</span>
+              {/* Typing animated word with cursor blink */}
+              <span className="text-[#6c3483]">
+                {typedWord}
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "3px",
+                    height: "0.85em",
+                    background: "#6c3483",
+                    marginLeft: "3px",
+                    verticalAlign: "text-bottom",
+                    animation: "blink 1s step-end infinite",
+                  }}
+                />
+              </span>
+              <br />
+              the World's<br />
+              Finest Art
             </h1>
+
+            {/* Cursor blink keyframe — injected inline once */}
+            <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+
             <p className="text-gray-300 text-lg leading-relaxed max-w-md">
               ArtSphere connects extraordinary artists with passionate collectors.
               Browse curated galleries, join live auctions, and own exceptional art.
@@ -133,7 +160,6 @@ const Home = () => {
               )}
             </div>
 
-            {/* Slide indicators */}
             {featuredArt.length > 1 && (
               <div className="flex gap-2 pt-2">
                 {featuredArt.slice(0, 5).map((_, i) => (
@@ -151,13 +177,11 @@ const Home = () => {
             )}
           </div>
 
-          {/* Right — featured artwork card */}
           {heroArt && (
             <div
               onClick={() => navigate(`/art/${heroArt._id}`)}
               className="relative cursor-pointer group"
             >
-              {/* Frame */}
               <div
                 className="relative rounded-2xl overflow-hidden shadow-2xl"
                 style={{
@@ -172,8 +196,6 @@ const Home = () => {
                   className="w-full h-80 object-cover rounded-xl group-hover:brightness-110 transition-all duration-300"
                 />
               </div>
-
-              {/* Art info label */}
               <div className="mt-4 px-2">
                 <p
                   className="text-white font-bold text-xl truncate"
@@ -195,7 +217,6 @@ const Home = () => {
           )}
         </div>
 
-        {/* Bottom fade */}
         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-[#0f0f1a] to-transparent" />
       </section>
 
@@ -221,7 +242,8 @@ const Home = () => {
               </button>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-4"
+            <div
+              className="flex gap-4 overflow-x-auto pb-4"
               style={{ scrollbarWidth: "thin", scrollbarColor: "#6c3483 #1a1a2e" }}
             >
               {liveAuctions.slice(0, 6).map(art => (
@@ -260,7 +282,7 @@ const Home = () => {
         </section>
       )}
 
-      {/* ── FEATURED ARTWORKS GRID ── */}
+      {/* ── FEATURED ARTWORKS GRID — ArtCard already has magnetic built in ── */}
       <section className="bg-[#0a0a1a] py-16 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
@@ -403,7 +425,6 @@ const Home = () => {
       <section
         className="py-20 px-4 text-center"
         style={{
-          background: "linear-gradient(135deg, #1a1a2e 0%, #6c3483/20 50%, #1a1a2e 100%)",
           backgroundImage: "linear-gradient(135deg, #1a1a2e 0%, rgba(108,52,131,0.2) 50%, #1a1a2e 100%)",
         }}
       >

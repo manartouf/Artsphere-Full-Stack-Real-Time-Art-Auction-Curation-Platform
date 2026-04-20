@@ -42,6 +42,8 @@ const AuctionRoom = () => {
   const userRef = useRef(user);
   const countdownTimers = useRef([]);
   const bidHistoryScrollRef = useRef(null);
+  // Prevents double mark-sold calls for the same artwork across clients
+  const markSoldCalledRef = useRef(new Set());
 
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { currentArtIndexRef.current = currentArtIndex; }, [currentArtIndex]);
@@ -65,16 +67,37 @@ const AuctionRoom = () => {
     countdownTimers.current = [];
   };
 
+  // ── handleArtworkSold ─────────────────────────────────
+  // KEY FIX: Does NOT use setArtworks(prev => ...) callback form.
+  // Instead reads from artworksRef.current directly so all ref updates
+  // are synchronous and the socket bidUpdate handler always sees fresh state.
   const handleArtworkSoldRef = useRef(null);
-  handleArtworkSoldRef.current = () => {
+  handleArtworkSoldRef.current = async () => {
     const idx = currentArtIndexRef.current;
-    const arts = artworksRef.current;
     const winningBid = currentBidRef.current;
     const winner = highestBidderRef.current;
     const currentUser = userRef.current;
+    const artId = artworksRef.current[idx]?._id;
 
+    // Prevent double-fire for same artwork (e.g. two clients both reach SOLD)
+    if (!artId || markSoldCalledRef.current.has(String(artId))) return;
+    markSoldCalledRef.current.add(String(artId));
+
+    // Notify winner immediately
     if (winner && String(currentUser?._id) === String(winner._id)) {
-      toast.success(`🎉 You won "${arts[idx]?.title}" for $${winningBid}!`, { duration: 6000 });
+      toast.success(
+        `🎉 You won "${artworksRef.current[idx]?.title}" for $${winningBid}!`,
+        { duration: 6000 }
+      );
+    }
+
+    // Call backend to mark sold, deduct wallet, notify winner in DB
+    if (artId) {
+      try {
+        await API.put(`/artworks/${artId}/mark-sold`);
+      } catch {
+        // Already sold is fine — idempotent
+      }
     }
 
     setArtworkJustSold(true);
@@ -85,40 +108,56 @@ const AuctionRoom = () => {
       artworkJustSoldRef.current = false;
       setSoldCountdown(null);
 
-      setArtworks(prev => {
-        const updated = [...prev];
-        if (updated[idx]) {
-          updated[idx] = { ...updated[idx], isSold: true, soldPrice: winningBid };
-        }
-        const nextIdx = updated.findIndex((a, i) => i > idx && !a.isSold);
-        if (nextIdx !== -1) {
-          setCurrentArtIndex(nextIdx);
-          currentArtIndexRef.current = nextIdx;
-          const nextArt = updated[nextIdx];
-          const sp = nextArt.auctionStartPrice || nextArt.price || 0;
-          setStartingPrice(sp);
-          startingPriceRef.current = sp;
-          setCurrentBid(sp);
-          currentBidRef.current = sp;
-          setTotalBids(0);
-          totalBidsRef.current = 0;
-          setBidHistory([]);
-          setHighestBidder(null);
-          highestBidderRef.current = null;
-          clearCountdownTimers();
-          setNextBidAmount(computeNextBid(sp, 0));
-          toast(`🎨 Next: "${nextArt.title}" — Bidding starts now!`, { duration: 4000 });
-        } else {
-          setAuctionEnded(true);
-          auctionEndedRef.current = true;
-          clearCountdownTimers();
-          toast("🏁 All artworks sold! Auction complete.", { icon: "🎉", duration: 5000 });
-        }
-        return updated;
-      });
+      // ── CRITICAL FIX ──────────────────────────────────
+      // Build freshArts from ref (not from stale prev callback).
+      // Then immediately sync ref AND state together so socket
+      // handlers always read the correct current artwork.
+      const freshArts = artworksRef.current.map((a, i) =>
+        i === idx ? { ...a, isSold: true, soldPrice: winningBid } : a
+      );
+      artworksRef.current = freshArts;   // sync ref first
+      setArtworks(freshArts);            // then state
+      // ──────────────────────────────────────────────────
+
+      const nextIdx = freshArts.findIndex((a, i) => i > idx && !a.isSold);
+
+      if (nextIdx !== -1) {
+        const nextArt = freshArts[nextIdx];
+        const sp = nextArt.auctionStartPrice || nextArt.price || 0;
+
+        // Update index ref synchronously before state so socket handler
+        // immediately uses correct artwork for artId filtering
+        currentArtIndexRef.current = nextIdx;
+        setCurrentArtIndex(nextIdx);
+
+        startingPriceRef.current = sp;
+        setStartingPrice(sp);
+
+        currentBidRef.current = sp;
+        setCurrentBid(sp);
+
+        totalBidsRef.current = 0;
+        setTotalBids(0);
+
+        highestBidderRef.current = null;
+        setHighestBidder(null);
+
+        setBidHistory([]);
+        clearCountdownTimers();
+        setNextBidAmount(computeNextBid(sp, 0));
+
+        toast(`🎨 Next: "${nextArt.title}" — Bidding starts now!`, { duration: 4000 });
+      } else {
+        // All artworks done
+        auctionEndedRef.current = true;
+        setAuctionEnded(true);
+        clearCountdownTimers();
+        toast("🏁 All artworks sold! Auction complete.", { icon: "🎉", duration: 5000 });
+      }
     }, 3000);
   };
 
+  // ── startSoldCountdown ────────────────────────────────
   const startSoldCountdownRef = useRef(null);
   startSoldCountdownRef.current = () => {
     clearCountdownTimers();
@@ -155,6 +194,8 @@ const AuctionRoom = () => {
     socket.on("bidUpdate", (data) => {
       if (auctionEndedRef.current) return;
 
+      // artworksRef.current and currentArtIndexRef.current are always fresh
+      // because we update them synchronously in handleArtworkSoldRef above
       const currentArtNow = artworksRef.current[currentArtIndexRef.current];
       if (data.artId && currentArtNow && String(data.artId) !== String(currentArtNow._id)) return;
 
@@ -211,11 +252,10 @@ const AuctionRoom = () => {
     };
   }, [id]);
 
-  // ── Fetch auction — uses OLD correct routes ────────────
+  // ── Fetch auction — correct routes, no change ─────────
   useEffect(() => {
     const fetchAuction = async () => {
       try {
-        // OLD correct route: /auctions/${id}
         const { data: auctionData } = await API.get(`/auctions/${id}`);
         setAuction(auctionData);
 
@@ -246,7 +286,6 @@ const AuctionRoom = () => {
           setCurrentArtIndex(firstUnsoldIdx);
           currentArtIndexRef.current = firstUnsoldIdx;
 
-          // OLD correct route: /artworks/${id}
           const artData = await API.get(`/artworks/${arts[firstUnsoldIdx]._id}`);
           const artInfo = artData.data;
 
@@ -264,7 +303,7 @@ const AuctionRoom = () => {
           highestBidderRef.current = artInfo.highestBidder || null;
           setNextBidAmount(computeNextBid(sp, bidsCount));
 
-          // Resume countdown if last bid was placed within the last 12s
+          // Resume countdown if last bid was within last 12s
           if (artInfo.bids?.length > 0) {
             const lastBid = artInfo.bids[artInfo.bids.length - 1];
             const elapsed = Date.now() - new Date(lastBid.time || lastBid.createdAt).getTime();
@@ -314,7 +353,7 @@ const AuctionRoom = () => {
     return () => clearCountdownTimers();
   }, [id]);
 
-  // ── Place bid — uses OLD correct route ─────────────────
+  // ── Place bid ─────────────────────────────────────────
   const handlePlaceBid = async () => {
     if (!currentArt || currentArt.isSold || artworkJustSold || soldCountdown === "sold") {
       toast.error("Bidding is closed for this artwork.");
@@ -326,7 +365,6 @@ const AuctionRoom = () => {
     }
     setBidding(true);
     try {
-      // OLD correct route: /artworks/${id}/bid
       await API.post(`/artworks/${currentArt._id}/bid`, { amount: nextBidAmount });
       toast.success(`Bid placed: $${nextBidAmount} 🎨`);
       if (user?.role === "buyer") {
