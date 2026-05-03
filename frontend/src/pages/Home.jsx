@@ -7,7 +7,7 @@ import ArtistCard from "../components/ArtistCard";
 import CountdownTimer from "../components/CountdownTimer";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useTypingEffect } from "../hooks/useTypingEffect";
-//import InfiniteCanvas from "../components/InfiniteCanvas";
+import HallwayGallery from "../components/HallwayGallery";
 
 // Words that cycle in the animated hero heading
 const HERO_WORDS = ["Discover", "Collect", "Explore", "Experience"];
@@ -282,8 +282,45 @@ const Home = () => {
         </section>
       )}
 
-      {/* ── FEATURED ARTWORKS GRID — ArtCard already has magnetic built in ── */}
+      {/* ── INFINITE CANVAS GALLERY ── */}
       <section className="bg-[#0a0a1a] py-16 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <p className="text-[#6c3483] text-xs font-bold uppercase tracking-widest mb-1">
+                Explore Freely
+              </p>
+              <h2
+                className="text-3xl font-black text-white"
+                style={{ fontFamily: "Georgia, serif" }}
+              >
+                The Gallery
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Scroll to zoom · drag to pan · double-click to focus
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/browse")}
+              className="text-[#6c3483] text-sm hover:underline font-bold"
+            >
+              Browse all →
+            </button>
+          </div>
+
+          {artworks.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
+              <p className="text-4xl mb-4">🎨</p>
+              <p>No artworks yet. Check back soon!</p>
+            </div>
+          ) : (
+            <HallwayGallery artworks={artworks} />
+          )}
+        </div>
+      </section>
+
+      {/* ── FEATURED ARTWORKS GRID — ArtCard already has magnetic built in ── */}
+      <section className="bg-[#0a0a1a] py-8 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
