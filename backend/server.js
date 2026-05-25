@@ -27,14 +27,14 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "https://artsphere-full-stack-real-time-art-auction-curation-otg1et5ya.vercel.app"],
+    origin: [process.env.CLIENT_URL, "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true
   },
 });
 
 app.use(cors({
-  origin: ["http://localhost:5173", "https://artsphere-full-stack-real-time-art-auction-curation-otg1et5ya.vercel.app"],
+  origin: [process.env.CLIENT_URL, "http://localhost:5173"],
   credentials: true
 }));
 app.use(express.json());
@@ -62,8 +62,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ FIX: On startup, clean up any Art docs that still have isAuction:true
-// but belong to an already-ended Auction. Handles server restarts showing stale live badges.
 const cleanupStaleAuctionFlags = async () => {
   try {
     const endedAuctions = await Auction.find({ status: "ended" })
@@ -72,7 +70,6 @@ const cleanupStaleAuctionFlags = async () => {
     for (const auction of endedAuctions) {
       if (!auction.collectionId?.artworks?.length) continue;
       const artworkIds = auction.collectionId.artworks.map(a => a._id || a);
-      // Clear isAuction flag on all unsold artworks from ended auctions
       await Art.updateMany(
         { _id: { $in: artworkIds }, isSold: false, isAuction: true },
         { isAuction: false, auctionStatus: "ended" }
@@ -98,9 +95,6 @@ const runAuctionAutoEnd = async () => {
       const artworks = auction.collectionId.artworks;
       if (!artworks || artworks.length === 0) continue;
 
-      // ✅ FIX: Use the LAST artwork's auctionEndTime as the global end time.
-      // The last artwork's slot end IS the auction's total end time.
-      // Previously was using firstArt which only covers the first slot.
       const lastArtRef = artworks[artworks.length - 1];
       const lastArt = await Art.findById(lastArtRef._id || lastArtRef);
       if (!lastArt || !lastArt.auctionEndTime) continue;
@@ -109,19 +103,16 @@ const runAuctionAutoEnd = async () => {
 
       if (now < globalEndTime) continue;
 
-      // Auction time is over — end it
       auction.status = "ended";
       await auction.save();
 
       const artworkIds = artworks.map(a => a._id || a);
 
-      // ✅ FIX: Clear isAuction on ALL artworks (sold and unsold) so no stale live badges
       await Art.updateMany(
         { _id: { $in: artworkIds } },
         { isAuction: false, auctionStatus: "ended" }
       );
 
-      // Handle winner for artworks that had bids but weren't formally sold yet
       for (const artRef of artworks) {
         const art = await Art.findById(artRef._id || artRef).populate("highestBidder");
         if (!art || art.isSold) continue;
@@ -176,7 +167,6 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB Connected Successfully");
-    // ✅ Run cleanup first, then start scheduler
     await cleanupStaleAuctionFlags();
     runAuctionAutoEnd();
     setInterval(runAuctionAutoEnd, 60 * 1000);
